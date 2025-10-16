@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invoice Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2/css/pico.min.css">
+  <!-- Load Vue from local classpath via WebJars to avoid external CDN dependency -->
+  <script src="/webjars/vue/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<main class="container">
+  <h1>Invoice Dashboard</h1>
+  <section>
+    <div class="grid">
+      <article>
+        <h3>Total Invoices</h3>
+        <strong>{{ summary.totalInvoices }}</strong>
+      </article>
+      <article>
+        <h3>Paid</h3>
+        <strong>{{ summary.paidCount }}</strong>
+      </article>
+      <article>
+        <h3>Overdue</h3>
+        <strong style="color:crimson">{{ summary.overdueCount }}</strong>
+      </article>
+      <article>
+        <h3>Total Outstanding</h3>
+        <strong>{{ currency(summary.totalOutstanding) }}</strong>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Create Invoice</h2>
+    <form @submit.prevent="createInvoice">
+      <div class="grid">
+        <input v-model="form.invoiceNumber" placeholder="Invoice # (e.g., INV-1004)" required />
+        <input v-model="form.customerName" placeholder="Customer Name" required />
+      </div>
+      <div class="grid">
+        <input type="date" v-model="form.issueDate" required />
+        <input type="date" v-model="form.dueDate" required />
+      </div>
+      <h4>Items</h4>
+      <table role="grid">
+        <thead>
+        <tr><th>Description</th><th>Qty</th><th>Unit Price</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr v-for="(it, idx) in form.items" :key="idx">
+          <td><input v-model="it.description" required /></td>
+          <td style="width:100px"><input type="number" min="1" v-model.number="it.quantity" required /></td>
+          <td style="width:150px"><input type="number" step="0.01" min="0" v-model.number="it.unitPrice" required /></td>
+          <td><button type="button" @click="form.items.splice(idx,1)">Remove</button></td>
+        </tr>
+        </tbody>
+      </table>
+      <button type="button" @click="form.items.push({description:'',quantity:1,unitPrice:0})">Add Item</button>
+      <button type="submit">Create</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Invoices</h2>
+    <table role="grid">
+      <thead>
+      <tr><th>#</th><th>Customer</th><th>Issue</th><th>Due</th><th>Status</th><th>Total</th><th>Paid</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+      <tr v-for="inv in invoices" :key="inv.id">
+        <td>{{ inv.invoiceNumber }}</td>
+        <td>{{ inv.customerName }}</td>
+        <td>{{ inv.issueDate }}</td>
+        <td :style="{color: isOverdue(inv) ? 'crimson' : ''}">{{ inv.dueDate }}</td>
+        <td>{{ inv.status }}</td>
+        <td>{{ currency(sum(inv.items)) }}</td>
+        <td>{{ currency(inv.amountPaid || 0) }}</td>
+        <td>
+          <button @click="promptPay(inv)">Mark Payment</button>
+          <a :href="`/api/invoices/${inv.id}/pdf`" target="_blank">PDF</a>
+          <button class="secondary" @click="remove(inv)">Delete</button>
+        </td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<script>
+const { createApp } = Vue;
+createApp({
+  data(){
+    return {
+      invoices: [],
+      summary: { totalInvoices:0, paidCount:0, overdueCount:0, totalOutstanding:0 },
+      form: { invoiceNumber:'', customerName:'', issueDate:'', dueDate:'', items:[{description:'', quantity:1, unitPrice:0}] }
+    }
+  },
+  mounted(){
+    this.refresh();
+  },
+  methods:{
+    currency(v){ return new Intl.NumberFormat(undefined,{style:'currency',currency:'USD'}).format(Number(v||0)); },
+    sum(items){ return (items||[]).reduce((a,i)=>a + (Number(i.unitPrice)||0) * (Number(i.quantity)||0),0); },
+    isOverdue(inv){
+      if(inv.status==='PAID') return false;
+      const today = new Date().toISOString().slice(0,10);
+      return inv.dueDate < today;
+    },
+    async refresh(){
+      const [invs, sum] = await Promise.all([
+        fetch('/api/invoices').then(r=>r.json()),
+        fetch('/api/summary').then(r=>r.json())
+      ]);
+      this.invoices = invs;
+      this.summary = sum;
+    },
+    async createInvoice(){
+      const body = JSON.stringify(this.form);
+      const res = await fetch('/api/invoices', {method:'POST', headers:{'Content-Type':'application/json'}, body});
+      if(res.ok){
+        this.form = { invoiceNumber:'', customerName:'', issueDate:'', dueDate:'', items:[{description:'', quantity:1, unitPrice:0}] };
+        await this.refresh();
+      } else {
+        alert('Failed to create invoice');
+      }
+    },
+    async promptPay(inv){
+      const amt = prompt('Enter payment amount');
+      if(!amt) return;
+      const res = await fetch(`/api/invoices/${inv.id}/pay`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount: Number(amt)})});
+      if(res.ok) await this.refresh(); else alert('Payment failed');
+    },
+    async remove(inv){
+      if(!confirm('Delete this invoice?')) return;
+      const res = await fetch(`/api/invoices/${inv.id}`, {method:'DELETE'});
+      if(res.ok) await this.refresh();
+    }
+  }
+}).mount('main');
+</script>
+</body>
+</html>

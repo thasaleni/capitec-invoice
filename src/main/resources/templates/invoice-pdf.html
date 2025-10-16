@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Invoice PDF</title>
+    <style>
+        body { font-family: DejaVu Sans, Arial, sans-serif; }
+        .header { display: flex; justify-content: space-between; }
+        .items table { width: 100%; border-collapse: collapse; }
+        .items th, .items td { border: 1px solid #ddd; padding: 8px; }
+        .items th { background: #f2f2f2; }
+        .totals { text-align: right; margin-top: 10px; }
+        .badge { padding: 4px 8px; border-radius: 4px; background: #eee; display:inline-block; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h2>Invoice <span th:text="${invoice.invoiceNumber}"></span></h2>
+        <div>Customer: <strong th:text="${invoice.customerName}"></strong></div>
+    </div>
+    <div class="badge" th:text="${invoice.status}"></div>
+</div>
+<div>
+    <div>Issue Date: <span th:text="${invoice.issueDate}"></span></div>
+    <div>Due Date: <span th:text="${invoice.dueDate}"></span></div>
+</div>
+<div class="items">
+    <table>
+        <thead>
+        <tr>
+            <th>Description</th>
+            <th>Qty</th>
+            <th>Unit Price</th>
+            <th>Line Total</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${invoice.items}">
+            <td th:text="${item.description}"></td>
+            <td th:text="${item.quantity}"></td>
+            <td th:text="${item.unitPrice}"></td>
+            <td th:text="${#numbers.formatDecimal(item.unitPrice * item.quantity, 1, 'COMMA', 2, 'POINT')}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+<div class="totals">
+    <div>Total: <strong th:text="${invoice.total}"></strong></div>
+    <div>Amount Paid: <strong th:text="${invoice.amountPaid}"></strong></div>
+    <div>Balance Due: <strong th:text="${invoice.balanceDue}"></strong></div>
+</div>
+</body>
+</html>
